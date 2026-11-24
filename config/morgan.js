@@ -92,6 +92,11 @@ const compiledLines = new Map(Object.values(colors).map((color) => [color, logge
 
 const formatLine = (tokens, req, res) => compiledLines.get(statusColor(res.statusCode))(tokens, req, res);
 
+const chunkBytes = (chunk, encoding) => {
+  if (typeof chunk === 'string') return Buffer.byteLength(chunk, typeof encoding === 'string' ? encoding : undefined);
+  return chunk instanceof Uint8Array ? chunk.byteLength : 0;
+};
+
 // Create a middleware to capture original content length
 const captureContentLength = (req, res, next) => {
   const originalWrite = res.write;
@@ -99,18 +104,12 @@ const captureContentLength = (req, res, next) => {
   let length = 0;
 
   res.write = (...args) => {
-    const [chunk] = args;
-    if (chunk) {
-      length += chunk.length;
-    }
+    length += chunkBytes(args[0], args[1]);
     return originalWrite.apply(res, args);
   };
 
   res.end = (...args) => {
-    const [chunk] = args;
-    if (chunk) {
-      length += chunk.length;
-    }
+    length += chunkBytes(args[0], args[1]);
     if (length > 0) {
       res._contentLength = length;
     }

@@ -1,9 +1,38 @@
 const morgan = require('morgan');
 const { expect } = require('chai');
+const express = require('express');
 const sinon = require('sinon');
+const request = require('supertest');
 
 // Import the morgan configuration to ensure tokens are registered
-const { _getMorganFormat, _formatLine } = require('../config/morgan');
+const { _getMorganFormat, _formatLine, morganLogger } = require('../config/morgan');
+
+describe('Morgan response byte counts', () => {
+  for (const [encoding, expected] of [
+    ['utf8', '2.00KB'],
+    ['latin1', '1.00KB'],
+  ]) {
+    it(`counts ${encoding} bytes across write and end`, async () => {
+      const app = express();
+      const route = `/morgan-bytes-${encoding}`;
+      const chunk = '\u00e9'.repeat(512);
+      app.use(morganLogger());
+      app.get(route, (req, res) => {
+        res.write(chunk, encoding);
+        res.end(chunk, encoding);
+      });
+
+      const write = sinon.spy(process.stdout, 'write');
+      try {
+        await request(app).get(route).expect(200);
+        const log = write.args.map(([message]) => String(message)).find((line) => line.includes(`GET ${route} `));
+        expect(log).to.include(` ${expected} COMPLETE `);
+      } finally {
+        write.restore();
+      }
+    });
+  }
+});
 
 describe('Morgan Configuration Tests', () => {
   let req;
